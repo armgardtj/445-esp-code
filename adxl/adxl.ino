@@ -5,12 +5,10 @@
 
 ADXL335 accelerometer;
 
-const char* ssid = "RecycleNet";
-const char* wifipass = "Birdemption69";
+const char* ssid = "GarbageNet";
+const char* wifipass = "birdemption69";
 const String webServer = "http://33sd.ngrok.io/updateNode";
-String nodeID = "ib3vz222u7m0dib";
-const String username = "ian.goodwin89998@gmail.com";
-const String password = "testpassword";
+const String nodeID = "ib3vz222u7m0dib";
 
 const int powerButtonPin = 1;
 const int speaker = 2;
@@ -26,7 +24,10 @@ bool buttonPressedLastCycle = false;
 bool lastState = false;
 bool currState = false;
 int onCycles = 0;
+int onCountsWhileOff = 0;
 const int maxOnCycles = 2000;
+const float onHighThreshold = 121.0;
+const float onLowThreshold = 110.0;
 
 void setup()
 {
@@ -77,16 +78,33 @@ void on_handler()
 {
   float x,y,z;
   accelerometer.getAcceleration(&x,&y,&z);
-  Serial.print(x); Serial.print(" ");
-  Serial.print(y); Serial.print(" ");
-  Serial.println(z);
-  if (z >= 120.0) {
-    onCycles = maxOnCycles;
-    currState = true;
-  }
-  else {
-    if (onCycles-- >= 0){
-      currState = false;
+//  Serial.print(x); Serial.print(" ");
+//  Serial.print(y); Serial.print(" ");
+//  Serial.println(z);
+  if (lastState == true) { // appliance was on
+    if (z >= onHighThreshold or z <= onLowThreshold) { // check if still on (breaks threshold)
+      onCycles = maxOnCycles; // set timer to max value
+      currState = true; // set appliance to on
+    }
+    else {
+      if (onCycles-- <= 0){ // if device hasn't broke threshold in clock span
+        currState = false; // set appliance to off
+      }
+    }
+  } else { // appliance was off
+    if (z >= onHighThreshold or z <= onLowThreshold) { // check if value broke threshold while off
+      if (onCountsWhileOff++ == 0) { // if first time, start counting over number of cycles
+        onCycles = maxOnCycles; // reset cycle counter
+      }
+      else if (onCountsWhileOff == 10) { // if number if hits exceeds 10
+        currState = true; // mark appliance as on
+
+      }
+    }
+    else {
+      if (onCycles-- <= 0){ // decrement number of cycles
+        onCountsWhileOff = 0; // set hits to 0 if cycle finishes
+      }
     }
   }
   if (currState != lastState)
