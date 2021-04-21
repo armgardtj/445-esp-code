@@ -21,15 +21,16 @@ bool lastState = false;
 bool currState = false;
 int onCycles = 0;
 int onCountsWhileOff = 0;
+const int maxCalibrationCycles = 5000;
 const int maxOnCycles = 2000;
-const float onHighThreshold = 121.0;
-const float onLowThreshold = 110.0;
+float onThreshold = 121.0;
 
 void setup()
 {
   setup_board();
   setup_wifi(); 
   setup_sensor();
+  calibrate();
 }
 
 void setup_board()
@@ -58,6 +59,47 @@ void setup_wifi()
 void setup_sensor()
 {
   accelerometer.begin();
+}
+
+void calibrate()
+{
+  Serial.println("Calibration mode");
+  Serial.println("Recording off data in");
+  delay(1000);
+  Serial.println("3");
+  delay(1000);
+  Serial.println("2");
+  delay(1000);
+  Serial.println("1");
+  delay(1000);
+  int calibrationCycles = maxCalibrationCycles;
+  float offVal = 0.0;
+  while (calibrationCycles-- > 0) {
+    float x,y,z;
+    measure_data(&x,&y,&z);
+    offVal += z;
+    //Serial.print(z); Serial.print(" "); Serial.print(offVal); Serial.print(" "); Serial.println(calibrationCycles);
+  }
+  offVal /= maxCalibrationCycles;
+  Serial.println("Recording on data in");
+  delay(1000);
+  Serial.println("3");
+  delay(1000);
+  Serial.println("2");
+  delay(1000);
+  Serial.println("1");
+  delay(1000);
+  calibrationCycles = maxCalibrationCycles;
+  float onVal = 0.0;
+  while (calibrationCycles-- > 0) {
+    float x,y,z;
+    measure_data(&x,&y,&z);
+    onVal += abs(z - offVal);
+    //Serial.print(z); Serial.print(" "); Serial.print(onVal); Serial.print(" "); Serial.println(calibrationCycles);
+  }
+  onVal /= maxCalibrationCycles;
+  onThreshold = onVal + offVal;
+  Serial.println(onThreshold);
 }
 
 void loop()
@@ -103,7 +145,7 @@ void measure_data(float *x, float *y, float *z)
 void determine_state(float v)
 {
   if (lastState == true) { // appliance was on
-    if (v >= onHighThreshold or v <= onLowThreshold) { // check if still on (breaks threshold)
+    if (v >= onThreshold) { // check if still on (breaks threshold)
       onCycles = maxOnCycles; // set timer to max value
       currState = true; // set appliance to on
     }
@@ -113,7 +155,7 @@ void determine_state(float v)
       }
     }
   } else { // appliance was off
-    if (v >= onHighThreshold or v <= onLowThreshold) { // check if value broke threshold while off
+    if (v >= onThreshold) { // check if value broke threshold while off
       if (onCountsWhileOff++ == 0) { // if first time, start counting over number of cycles
         onCycles = maxOnCycles; // reset cycle counter
       }
@@ -132,7 +174,7 @@ void determine_state(float v)
 
 void send_http_request(int deviceStatus) 
 {
-  Serial.println(deviceStatus);
+  //Serial.println(deviceStatus);
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("disconnected");
     return;
@@ -142,6 +184,6 @@ void send_http_request(int deviceStatus)
   http.addHeader("Content-Type", "application/json");
   String payload = "{\"nodeID\": \"" + nodeID + "\", \"active\":" + (bool)deviceStatus + ", \"value\": " + String(deviceStatus) + "}";
   int httpResponseCode = http.PUT(payload);
-  Serial.println(httpResponseCode);
+  //Serial.println(httpResponseCode);
   http.end();
 }
