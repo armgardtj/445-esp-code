@@ -5,18 +5,14 @@
 
 ADXL335 accelerometer;
 
-const char* ssid = "GarbageNet";
-const char* wifipass = "birdemption69";
+const char* ssid = "RecycleNet";
+const char* wifipass = "Birdemption69";
 const String webServer = "http://33sd.ngrok.io/updateNode";
 const String nodeID = "ib3vz222u7m0dib";
 
 const int powerButtonPin = 1;
 const int speaker = 2;
 const int led = 3;
-const int xPin = 6;
-const int yPin = 7;
-const int zPin = 8;
-const int stPin = 9;
 
 bool isOff = true;
 bool powerButtonPressed = false;
@@ -31,8 +27,23 @@ const float onLowThreshold = 110.0;
 
 void setup()
 {
-  Serial.begin(115200);
+  setup_board();
+  setup_wifi(); 
+  setup_sensor();
+}
 
+void setup_board()
+{
+  Serial.begin(115200);
+  pinMode(powerButtonPin, INPUT);
+  pinMode(speaker, OUTPUT);
+  pinMode(led, OUTPUT);
+  digitalWrite(speaker, LOW);
+  digitalWrite(led, LOW);
+}
+
+void setup_wifi()
+{
   WiFi.begin(ssid, wifipass);
   Serial.println("Connecting");
   while(WiFi.status() != WL_CONNECTED) {
@@ -42,15 +53,13 @@ void setup()
   Serial.println("");
   Serial.print("Connected to WiFi network with IP Address: ");
   Serial.println(WiFi.localIP());
- 
-  pinMode(powerButtonPin, INPUT);
-  pinMode(speaker, OUTPUT);
-  pinMode(led, OUTPUT);
-  digitalWrite(speaker, LOW);
-  digitalWrite(led, LOW);
-  
+}
+
+void setup_sensor()
+{
   accelerometer.begin();
 }
+
 void loop()
 {
   powerButtonPressed = digitalRead(powerButtonPin);
@@ -77,12 +86,24 @@ void off_handler()
 void on_handler()
 {
   float x,y,z;
-  accelerometer.getAcceleration(&x,&y,&z);
+  measure_data(&x,&y,&z);
+  determine_state(z);
+  if (currState != lastState)
+    send_http_request(currState); 
+}
+
+void measure_data(float *x, float *y, float *z)
+{
+  accelerometer.getAcceleration(x,y,z);
 //  Serial.print(x); Serial.print(" ");
 //  Serial.print(y); Serial.print(" ");
 //  Serial.println(z);
+}
+
+void determine_state(float v)
+{
   if (lastState == true) { // appliance was on
-    if (z >= onHighThreshold or z <= onLowThreshold) { // check if still on (breaks threshold)
+    if (v >= onHighThreshold or v <= onLowThreshold) { // check if still on (breaks threshold)
       onCycles = maxOnCycles; // set timer to max value
       currState = true; // set appliance to on
     }
@@ -92,7 +113,7 @@ void on_handler()
       }
     }
   } else { // appliance was off
-    if (z >= onHighThreshold or z <= onLowThreshold) { // check if value broke threshold while off
+    if (v >= onHighThreshold or v <= onLowThreshold) { // check if value broke threshold while off
       if (onCountsWhileOff++ == 0) { // if first time, start counting over number of cycles
         onCycles = maxOnCycles; // reset cycle counter
       }
@@ -107,8 +128,6 @@ void on_handler()
       }
     }
   }
-  if (currState != lastState)
-    send_http_request(currState); 
 }
 
 void send_http_request(int deviceStatus) 
