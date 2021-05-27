@@ -1,4 +1,5 @@
 #include <WiFi.h>
+#include "esp_wpa2.h"
 #include <HTTPClient.h>
 #include <Adafruit_AHT10.h>
 #include <Wire.h>
@@ -6,9 +7,15 @@
 Adafruit_AHT10 aht;
 TwoWire w = TwoWire(0);
 
+//#define EAP_ANONYMOUS_IDENTITY "johnra2" //anonymous identity
+#define EAP_IDENTITY "johnra2"                  //user identity
+#define EAP_PASSWORD "Illinois6Killed^()64" //eduroam user password
+
 const char* ssid = "RecycleNet";
+const char* enterprisessid = "IllinoisNet";
 const char* wifipass = "Birdemption69";
 const String webServer = "http://33sd.ngrok.io/updateNode";
+const String webGraph = "http://33sd.ngrok.io/updateGraph";
 const String nodeID = "gqeqhver74ke1c6";
 
 const int powerButtonPin = 1;
@@ -43,7 +50,17 @@ void setup_board()
 
 void setup_wifi()
 {
-  WiFi.begin(ssid, wifipass);
+  int b = 1;
+  if (b){
+    WiFi.mode(WIFI_STA); //init wifi mode
+    //esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)EAP_ANONYMOUS_IDENTITY, strlen(EAP_ANONYMOUS_IDENTITY)); //provide identity
+    esp_wifi_sta_wpa2_ent_set_username((uint8_t *)EAP_IDENTITY, strlen(EAP_IDENTITY)); //provide username
+    esp_wifi_sta_wpa2_ent_set_password((uint8_t *)EAP_PASSWORD, strlen(EAP_PASSWORD)); //provide password
+    esp_wifi_sta_wpa2_ent_enable();
+    WiFi.begin(enterprisessid); //connect to wifi
+  } else {
+    WiFi.begin(ssid, wifipass);
+  }
   Serial.println("Connecting");
   while(WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -75,7 +92,6 @@ void loop()
 //  }
   on_handler();
   buttonPressedLastCycle = powerButtonPressed;
-  lastState = currState;
 }
 
 void off_handler()
@@ -114,8 +130,15 @@ void send_http_request(float deviceStatus)
   HTTPClient http;
   http.begin(webServer.c_str());
   http.addHeader("Content-Type", "application/json");
-  String payload = "{\"nodeID\": \"" + nodeID + "\", \"active\":" + (bool)deviceStatus + ", \"value\": " + String(deviceStatus) + "}";
+  String payload = "{\"nodeID\": \"" + nodeID + "\", \"active\":" + (bool)deviceStatus + "}";
   int httpResponseCode = http.PUT(payload);
+  Serial.println(httpResponseCode);
+  http.end();
+  delay(100);
+  http.begin(webGraph.c_str());
+  http.addHeader("Content-Type", "application/json");
+  payload = "{\"nodeID\": \"" + nodeID + "\", \"value\": " + String(deviceStatus) + "}";
+  httpResponseCode = http.PUT(payload);
   Serial.println(httpResponseCode);
   http.end();
 }
